@@ -1,4 +1,5 @@
 [
-  { "id": "p1", "nom": "Parking Exemple Centre", "adresse": "Rue Exemple 1, 1700 Fribourg", "capacite": 300, "lat": 46.8032, "lon": 7.1513 },
-  { "id": "p2", "nom": "Parking Exemple Gare", "adresse": "Rue Exemple 2, 1700 Fribourg", "capacite": 150, "lat": 46.8030, "lon": 7.1480 }
+  { "id": "alpes", "nom": "Parking des Alpes", "capacite": 178 },
+  { "id": "grand-places", "nom": "Parking des Grand-Places", "capacite": 450 },
+  { "id": "fribourg-centre", "nom": "Parking de Fribourg Centre", "capacite": 120 }
 ]
