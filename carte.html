@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Carte des places libres</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  html, body { height: 100%; margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  #carte { height: 100%; }
+  .popup-nom { font-weight: 700; font-size: 14px; }
+  .popup-libres { font-size: 20px; font-weight: 700; margin-top: 4px; }
+  .legende { background: #fff; padding: 6px 10px; border-radius: 6px; font-size: 12px; line-height: 1.6; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+  .pastille { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+</style>
+</head>
+<body>
+<div id="carte"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+  const COULEURS = { "disponible": "#1a8f4c", "presque complet": "#e08a00", "complet": "#c62828", "inconnu": "#888888" };
+  const carte = L.map("carte").setView([46.8036, 7.1520], 16);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, attribution: "&copy; OpenStreetMap"
+  }).addTo(carte);
+
+  const legende = L.control({ position: "bottomleft" });
+  legende.onAdd = () => {
+    const d = L.DomUtil.create("div", "legende");
+    d.innerHTML = Object.entries(COULEURS).map(([k, c]) => `<span class="pastille" style="background:${c}"></span>${k}`).join("<br>");
+    return d;
+  };
+  legende.addTo(carte);
+
+  const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const marqueurs = {};
+
+  function mettreAJour(p) {
+    if (p.lat == null || p.lon == null) return;
+    const couleur = COULEURS[p.statut] || COULEURS.inconnu;
+    const contenu = `<div class="popup-nom">${esc(p.nom)}</div>
+      <div class="popup-libres" style="color:${couleur}">${p.libres ?? "–"} / ${p.capacite ?? "?"} places libres</div>`;
+    if (!marqueurs[p.id]) {
+      marqueurs[p.id] = L.circleMarker([p.lat, p.lon], { radius: 14, weight: 3, color: "#fff", fillOpacity: 0.9 })
+        .addTo(carte).bindPopup(contenu)
+        .bindTooltip(String(p.libres ?? "–"), { permanent: true, direction: "center", className: "" });
+    }
+    const m = marqueurs[p.id];
+    m.setStyle({ fillColor: couleur });
+    m.setPopupContent(contenu);
+    m.setTooltipContent(String(p.libres ?? "–"));
+  }
+
+  let sourceAffichee = false;
+  function recadrer() {
+    const pts = Object.values(marqueurs).map((m) => m.getLatLng());
+    if (pts.length === 1) carte.setView(pts[0], 16);
+    if (pts.length > 1) carte.fitBounds(pts, { padding: [40, 40], maxZoom: 17 });
+  }
+  const es = new EventSource("/api/stream");
+  es.onmessage = (e) => {
+    const p = JSON.parse(e.data);
+    const nouveau = !marqueurs[p.id];
+    mettreAJour(p);
+    if (nouveau && marqueurs[p.id]) recadrer();
+    if (p.source && !sourceAffichee) {
+      carte.attributionControl.addAttribution("Données : " + esc(p.source));
+      sourceAffichee = true;
+    }
+  };
+</script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Places libres — parkings</title>
+<style>
+:root{ --ink:#1c2426; --ink-soft:#5b6b6e; --paper:#f5f3ee; --card:#ffffff; --line:#dfe0d8;
+  --ok:#1a8f4c; --warn:#b76e00; --full:#c62828;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); box-sizing: border-box; }
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --ink:#eef1f0; --ink-soft:#a9b6b4; --paper:#141a19; --card:#1c2422; --line:#2b332f; --ok:#5fd694; --warn:#f0b04a; --full:#ff7b7b; } }
+:root[data-theme="dark"]{ --ink:#eef1f0; --ink-soft:#a9b6b4; --paper:#141a19; --card:#1c2422; --line:#2b332f; --ok:#5fd694; --warn:#f0b04a; --full:#ff7b7b; }
+*{box-sizing:border-box;}
+html{scroll-padding-top: env(safe-area-inset-top, 0px);}
+html,body{height:100%;}
+body{ margin:0; background:var(--paper); color:var(--ink); font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+.wrap{ max-width:640px; margin:0 auto; padding:28px 20px 60px; }
+.mini-list{ border:1px solid var(--line); background:var(--card); border-radius:12px; overflow:hidden; }
+.mini-list table{ width:100%; border-collapse:collapse; font-size:13.5px; }
+.mini-list thead th{ text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); padding:10px 16px; border-bottom:1px solid var(--line); }
+.mini-list tbody td{ padding:10px 16px; border-bottom:1px solid var(--line); }
+.mini-list tbody tr:last-child td{ border-bottom:none; }
+.mini-list .ml-name{ font-weight:600; }
+.mini-list .ml-libres{ font-weight:700; color:var(--ink-soft); }
+.mini-list .disponible .ml-libres{ color:var(--ok); }
+.mini-list .presque .ml-libres{ color:var(--warn); }
+.mini-list .complet .ml-libres{ color:var(--full); }
+.mini-list-updated{ font-size:11px; color:var(--ink-soft); padding:8px 16px; border-top:1px solid var(--line); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="mini-list">
+    <table>
+      <thead><tr><th>Parking</th><th>Nombre de places</th><th>Places libres</th></tr></thead>
+      <tbody id="lignes"><tr><td colspan="3">Chargement…</td></tr></tbody>
+    </table>
+    <div class="mini-list-updated" id="maj">Connexion en cours…</div>
+  </div>
+</div>
+<script>
+  const data = {};
+  const classe = (s) => s === "disponible" ? "disponible" : s === "presque complet" ? "presque" : s === "complet" ? "complet" : "";
+  const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  function afficher() {
+    document.getElementById("lignes").innerHTML = Object.values(data).map((p) => `
+      <tr class="${classe(p.statut)}">
+        <td class="ml-name">${esc(p.nom)}</td>
+        <td>${p.capacite ?? "–"}</td>
+        <td class="ml-libres">${p.libres ?? "–"}${p.statut === "complet" ? " (complet)" : ""}</td>
+      </tr>`).join("");
+    const src = Object.values(data).find((p) => p.source)?.source;
+    document.getElementById("maj").textContent = "En direct — mis à jour à " + new Date().toLocaleTimeString("fr-CH") + (src ? " — Source : " + src : "");
+  }
+  const es = new EventSource("/api/stream");
+  es.onmessage = (e) => { const p = JSON.parse(e.data); data[p.id] = p; afficher(); };
+  es.onerror = () => { document.getElementById("maj").textContent = "Connexion perdue, reconnexion…"; };
+</script>
+</body>
+</html>
