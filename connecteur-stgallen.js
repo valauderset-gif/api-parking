@@ -25,6 +25,12 @@ function coordonnees(g) {
   return {};
 }
 
+// premier champ texte qui ressemble à un nom (au cas où les noms de champs changent)
+function parTexte(o) {
+  const k = Object.keys(o).find((k) => /name|nom|bezeich|titel|title/i.test(k) && typeof o[k] === "string");
+  return k ? o[k] : undefined;
+}
+
 let champsAffiches = false;
 
 async function interroger(majExterne) {
@@ -44,11 +50,13 @@ async function interroger(majExterne) {
     if (!lignes.length) console.log("[Saint-Gall] réponse reçue mais vide :", JSON.stringify(json).slice(0, 300));
     if (!champsAffiches && lignes[0]) {
       console.log("[Saint-Gall] champs reçus :", Object.keys(lignes[0]).join(", "));
+      console.log("[Saint-Gall] exemple :", JSON.stringify(lignes[0]).slice(0, 500));
       champsAffiches = true;
     }
     const vus = new Set();
-    for (const l of lignes) {
-      const id = String(premier(l, ["phid", "id"]) ?? "").trim();
+    for (const [i, l] of lignes.entries()) {
+      const nomBrut = premier(l, ["phname", "name", "title", "bezeichnung", "parkhaus"]) ?? parTexte(l);
+      const id = String(premier(l, ["phid", "id", "parkhaus_id", "pid"]) ?? nomBrut ?? i).trim().replace(/\s+/g, "-");
       if (!id || vus.has(id)) continue;
       vus.add(id);
       const libres = nombre(premier(l, ["shortfree", "frei", "free", "freie_parkplatze"]) ?? parMotif(l, ["free", "frei"]));
@@ -56,7 +64,7 @@ async function interroger(majExterne) {
       const { lat, lon } = coordonnees(premier(l, ["geopoint", "geo_point_2d", "koordinaten", "coordinates"]));
       majExterne({
         id: "sg-" + id,
-        nom: premier(l, ["phname", "name"]) || "Parking " + id,
+        nom: nomBrut || "Parking " + id,
         capacite, lat, lon,
         libres: libres == null ? null : Math.max(0, capacite ? Math.min(capacite, libres) : libres),
         source: SOURCE,
