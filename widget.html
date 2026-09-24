@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Places libres — parkings</title>
+<style>
+  body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: #fff; color: #222; }
+  .liste { display: grid; gap: 8px; padding: 8px; }
+  .p { display: flex; justify-content: space-between; align-items: center; gap: 12px;
+       padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; }
+  .nom { font-weight: bold; }
+  .adr { font-size: 13px; color: #666; }
+  .libres { font-size: 22px; font-weight: bold; text-align: right; white-space: nowrap; }
+  .statut { font-size: 12px; text-align: right; }
+  .disponible .libres { color: #1a7f37; }
+  .presque .libres { color: #c27c00; }
+  .complet .libres { color: #c62828; }
+  .inconnu .libres { color: #999; }
+  .maj { font-size: 11px; color: #999; padding: 0 10px 8px; }
+</style>
+</head>
+<body>
+<div class="liste" id="liste">Chargement…</div>
+<div class="maj" id="maj"></div>
+<script>
+  const data = {};
+  const classe = (s) => s === "disponible" ? "disponible" : s === "presque complet" ? "presque" : s === "complet" ? "complet" : "inconnu";
+  const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  function afficher() {
+    document.getElementById("liste").innerHTML = Object.values(data).map((p) => `
+      <div class="p ${classe(p.statut)}">
+        <div><div class="nom">${esc(p.nom)}</div><div class="adr">${esc(p.adresse)}</div></div>
+        <div><div class="libres">${p.libres ?? "–"}</div><div class="statut">${esc(p.statut)}</div></div>
+      </div>`).join("");
+    document.getElementById("maj").textContent = "Mis à jour à " + new Date().toLocaleTimeString("fr-CH");
+  }
+  const es = new EventSource("/api/stream"); // même serveur : aucune adresse à modifier
+  es.onmessage = (e) => { const p = JSON.parse(e.data); data[p.id] = p; afficher(); };
+  es.onerror = () => { document.getElementById("maj").textContent = "Connexion perdue, reconnexion…"; };
+</script>
+</body>
+</html>
