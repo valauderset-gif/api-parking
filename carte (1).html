@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Carte des places libres</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{ --ink:#1c2426; --ink-soft:#5b6b6e; --paper:#f5f3ee; --card:#ffffff; --line:#dfe0d8;
+  --ok:#1a8f4c; --warn:#b76e00; --full:#c62828; --hover:#f0f1ec; }
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --ink:#eef1f0; --ink-soft:#a9b6b4; --paper:#141a19; --card:#1c2422; --line:#2b332f; --ok:#5fd694; --warn:#f0b04a; --full:#ff7b7b; --hover:#232c2a; } }
+:root[data-theme="dark"]{ --ink:#eef1f0; --ink-soft:#a9b6b4; --paper:#141a19; --card:#1c2422; --line:#2b332f; --ok:#5fd694; --warn:#f0b04a; --full:#ff7b7b; --hover:#232c2a; }
+*{ box-sizing:border-box; }
+body{ margin:0; background:var(--paper); color:var(--ink); font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+.wrap{ max-width:900px; margin:0 auto; padding:16px; }
+#carte{ height:420px; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+.mini-list{ margin-top:16px; border:1px solid var(--line); background:var(--card); border-radius:12px; overflow:hidden; }
+.table-scroll{ overflow-x:auto; }
+table{ width:100%; border-collapse:collapse; font-size:13.5px; }
+thead th{ text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); padding:10px 16px; border-bottom:1px solid var(--line); white-space:nowrap; }
+tbody td{ padding:10px 16px; border-bottom:1px solid var(--line); }
+tbody tr{ cursor:pointer; }
+tbody tr:hover{ background:var(--hover); }
+tbody tr:last-child td{ border-bottom:none; }
+.ml-name{ font-weight:600; }
+.pastille{ display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:8px; vertical-align:middle; background:#888; }
+.ml-libres{ font-weight:700; color:var(--ink-soft); white-space:nowrap; }
+.disponible .ml-libres{ color:var(--ok); } .disponible .pastille{ background:var(--ok); }
+.presque .ml-libres{ color:var(--warn); } .presque .pastille{ background:var(--warn); }
+.complet .ml-libres{ color:var(--full); } .complet .pastille{ background:var(--full); }
+.maj{ font-size:11px; color:var(--ink-soft); padding:8px 16px; border-top:1px solid var(--line); }
+.popup-nom{ font-weight:700; font-size:14px; }
+.popup-libres{ font-size:18px; font-weight:700; margin-top:4px; }
+.marqueur{ background:none; border:none; }
+.marqueur div{ width:34px; height:34px; border-radius:50%; border:3px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.4);
+  color:#fff; font-weight:700; font-size:12px; display:flex; align-items:center; justify-content:center; }
+@media (max-width:600px){ #carte{ height:320px; } tbody td, thead th{ padding:8px 10px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="carte"></div>
+  <div class="mini-list">
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Parking</th><th>Nombre de places</th><th>Places libres</th></tr></thead>
+        <tbody id="lignes"><tr><td colspan="3">Chargement…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="maj" id="maj">Connexion en cours…</div>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+  const COULEURS = { "disponible": "#1a8f4c", "presque complet": "#e08a00", "complet": "#c62828", "inconnu": "#888888" };
+  const classe = (s) => s === "disponible" ? "disponible" : s === "presque complet" ? "presque" : s === "complet" ? "complet" : "";
+  const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  const carte = L.map("carte", { scrollWheelZoom: false }).setView([46.8036, 7.1520], 15);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap" }).addTo(carte);
+
+  const data = {}, marqueurs = {};
+  let sourceAffichee = false;
+
+  function icone(p) {
+    const c = COULEURS[p.statut] || COULEURS.inconnu;
+    return L.divIcon({ className: "marqueur", iconSize: [34, 34], iconAnchor: [17, 17],
+      html: `<div style="background:${c}">${p.libres ?? "–"}</div>` });
+  }
+  function popup(p) {
+    const c = COULEURS[p.statut] || COULEURS.inconnu;
+    return `<div class="popup-nom">${esc(p.nom)}</div>
+      <div class="popup-libres" style="color:${c}">${p.libres ?? "–"} / ${p.capacite ?? "?"} places libres</div>`;
+  }
+  function recadrer() {
+    const pts = Object.values(marqueurs).map((m) => m.getLatLng());
+    if (pts.length === 1) carte.setView(pts[0], 16);
+    if (pts.length > 1) carte.fitBounds(pts, { padding: [30, 30], maxZoom: 17 });
+  }
+  function majCarte(p) {
+    if (p.lat == null || p.lon == null) return;
+    if (!marqueurs[p.id]) {
+      marqueurs[p.id] = L.marker([p.lat, p.lon], { icon: icone(p) }).addTo(carte).bindPopup(popup(p));
+      recadrer();
+    } else {
+      marqueurs[p.id].setIcon(icone(p));
+      marqueurs[p.id].setPopupContent(popup(p));
+    }
+  }
+  function majListe() {
+    const liste = Object.values(data).sort((a, b) => String(a.nom).localeCompare(String(b.nom), "fr"));
+    document.getElementById("lignes").innerHTML = liste.map((p) => `
+      <tr class="${classe(p.statut)}" data-id="${esc(p.id)}">
+        <td class="ml-name"><span class="pastille"></span>${esc(p.nom)}</td>
+        <td>${p.capacite ?? "–"}</td>
+        <td class="ml-libres">${p.libres ?? "–"}${p.statut === "complet" ? " (complet)" : ""}</td>
+      </tr>`).join("");
+    const src = liste.find((p) => p.source)?.source;
+    document.getElementById("maj").textContent = "En direct — mis à jour à " + new Date().toLocaleTimeString("fr-CH") + (src ? " — Source : " + src : "");
+  }
+  // clic sur une ligne : la carte va au parking
+  document.getElementById("lignes").addEventListener("click", (e) => {
+    const tr = e.target.closest("tr[data-id]");
+    const m = tr && marqueurs[tr.dataset.id];
+    if (m) { carte.setView(m.getLatLng(), 17); m.openPopup(); document.getElementById("carte").scrollIntoView({ behavior: "smooth", block: "nearest" }); }
+  });
+
+  const es = new EventSource("/api/stream");
+  es.onmessage = (e) => {
+    const p = JSON.parse(e.data);
+    data[p.id] = p;
+    majCarte(p);
+    majListe();
+    if (p.source && !sourceAffichee) { carte.attributionControl.addAttribution("Données : " + esc(p.source)); sourceAffichee = true; }
+  };
+  es.onerror = () => { document.getElementById("maj").textContent = "Connexion perdue, reconnexion…"; };
+</script>
+</body>
+</html>
